@@ -96,10 +96,10 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
    * @param observations Sequence of observations from the environment
    */
   def learn(observations: Array[Int]) = {
-    var alpha: Array[Array[Float]] = forward(observations)
-    var beta: Array[Array[Float]] = backward(observations)
-    var eta: Array[Array[Array[Float]]] = Array.ofDim[Float](observations.length, states, states)
-    var gamma: Array[Array[Float]] = Array.tabulate(observations.length, states)((x,y) => 0f)
+    val alpha: Array[Array[Float]] = forward(observations)
+    val beta: Array[Array[Float]] = backward(observations)
+    val eta: Array[Array[Array[Float]]] = Array.ofDim[Float](observations.length, states, states)
+    val gamma: Array[Array[Float]] = Array.tabulate(observations.length, states)((x,y) => 0f)
 
     for {
       time <- 0 until observations.length
