@@ -11,6 +11,7 @@ import scala.util.Random
  * @param initialOutput An initial estimation of the probabilities for symbol output based on the current state
  */
 class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], val initialTransition: Array[Array[Float]], val initialOutput: Array[Array[Float]]) {
+  import HMM._
   require(states > 0, "The state space needs to have at least 1 state")
   require(outputs > 0, "There needs to be at least one possible output symbol")
 
@@ -21,6 +22,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
   Array.copy(initialTransition, 0, stateTransition, 0, states)
   Array.copy(initialOutput, 0, symbolOutput, 0, states)
 
+
   private def forward(observations: Array[Int]) = {
     val forwardMatrix: Array[Array[Float]] = Array.ofDim(observations.length, states)
 
@@ -28,9 +30,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       currentTime <- 0 until observations.length
       finalState <- 0 until states
     } {
-      forwardMatrix(currentTime)(finalState) = (1 to states).map(prevState =>
-        stateTransition(prevState)(finalState) * forwardMatrix(currentTime - 1)(prevState)
-      ).sum * symbolOutput(finalState)(observations(currentTime))
+      forwardMatrix(currentTime)(finalState) =
+        ∑(stateTransition(_: Int)(finalState), forwardMatrix(currentTime - 1), 1, states)(_ * _) * symbolOutput(finalState)(observations(currentTime))
     }
 
     forwardMatrix
@@ -43,8 +44,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       time <- observations.length to 1
       prevState <- 1 to states
     } {
-      backwardMatrix(time)(prevState) = (1 to states).map(finalState =>
-        stateTransition(prevState)(finalState) * backwardMatrix(time + 1)(finalState) * symbolOutput(finalState)(observations(time + 1))).sum
+      backwardMatrix(time)(prevState) = 
+        ∑(stateTransition(prevState), backwardMatrix(time + 1), symbolOutput(_)(observations(time + 1)), 1, states)(_ * _ * _)
     }
 
     backwardMatrix
@@ -54,7 +55,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
     val forwardMatrix = forward(observations)
     val lastTime = observations.length
 
-    (0 until states).map(state => forwardMatrix(lastTime)(state)).reduce((a,b) => a + b)
+    forwardMatrix(lastTime).sum
   }
 
   /**
@@ -73,13 +74,13 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       time <- 1 until observations.length
       next <- 0 until states
     } {
-      val temp = (0 to states-1).map(i => delta(time-1)(i) * stateTransition(i)(next))
+      val temp = (0 until states).map(i => delta(time-1)(i) * stateTransition(i)(next))
       val maxValue = temp.max
       delta(time)(next) = maxValue * symbolOutput(next)(observations(time))
       phsi(time)(next) = temp.indexOf(maxValue)
     }
 
-    val probability = (0 until states).map(i => delta(observations.length-1)(i)).max
+    val probability = delta(observations.length-1).max
 
     val sequence: Array[Float] = new Array[Float](observations.length)
     sequence(observations.length-1) = delta(observations.length-1).indexOf(probability)
@@ -107,8 +108,9 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       j <- (0 until states).par
     } {
       val numerator = alpha(time)(i) * stateTransition(i)(j) * symbolOutput(j)(observations(time)) * beta(time + 1)(j)
-      val denominator = (1 to states-1).map(e => beta(time)(e) * alpha(time)(e)).sum
+      val denominator = ∑(beta(time), alpha(time), 1, states)(_ * _)
       eta(time)(i)(j) = numerator / denominator
+
       gamma(time)(i) = (1 to states-1).map(e => eta(time)(i)(e)).sum
     }
 
@@ -194,6 +196,22 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
 }
 
 object HMM {
+  @inline def ∑(v1: Int => Float, v2: Int => Float, i_0: Int, i_n: Int)(op: (Float, Float) =>  Float): Float = {
+    var i = i_0 - 1
+    var acc = 0f
+    while ({i += 1; i < i_n}) {
+      acc += op(v1(i), v2(i))
+    }
+    acc
+  }
+  @inline def ∑(v1: Int => Float, v2: Int => Float, v3: Int => Float, i_0: Int, i_n: Int)(op: (Float, Float, Float) =>  Float): Float = {
+    var i = i_0 - 1
+    var acc = 0f
+    while ({i += 1; i < i_n}) {
+      acc += op(v1(i), v2(i), v3(i))
+    }
+    acc
+  }
   def create() = {
 
   }
