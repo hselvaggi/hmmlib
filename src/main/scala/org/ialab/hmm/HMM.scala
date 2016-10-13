@@ -91,7 +91,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       val denominator = ∑(1, states)( i => beta(time)(i) * alpha(time)(i) )
       eta(time)(i)(j) = numerator / denominator
 
-      gamma(time)(i) = (1 to states-1).map(e => eta(time)(i)(e)).sum
+      gamma(time)(i) = ∑(1, states-1)(e => eta(time)(i)(e))
     }
 
     R(0 until states, 0 until states, stateTransition) {
