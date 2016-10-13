@@ -52,7 +52,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
 
     (0 until states).foreach(i => delta(0)(i) = initialStates(i) * symbolOutput(i)(observations(0)))
 
-    R(1 until observations.length, 0 until states, delta, phsi) {
+    R(delta, phsi)(1 until observations.length, 0 until states) {
       (time, next) =>
         val temp = (0 until states).map(i => delta(time - 1)(i) * stateTransition(i)(next))
         val maxValue = temp.max
@@ -66,7 +66,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
     sequence(observations.length-1) = delta(observations.length-1).indexOf(probability)
 
 
-    R(Range(observations.length-2, -1, step = -1), sequence) { i => phsi(i + 1)(sequence(i+1).toInt) }
+    R(sequence)(Range(observations.length-2, -1, step = -1)) { i => phsi(i + 1)(sequence(i+1).toInt) }
 
     (probability, sequence)
   }
@@ -94,11 +94,11 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float], va
       gamma(time)(i) = ∑(1, states-1)(e => eta(time)(i)(e))
     }
 
-    R(0 until states, 0 until states, stateTransition) {
+    R(stateTransition)(0 until states, 0 until states) {
       (i,j) => (0 to observations.length -1).map(t => eta(t)(i)(j)).sum / (0 to observations.length -1).map(t => gamma(t)(i)).sum
     }
 
-    R(0 until states, 0 to states, symbolOutput) {
+    R(symbolOutput)(0 until states, 0 to states) {
       (i, o) => symbolOutput(i)(o) * (0 to observations.length -1).map(t => gamma(t)(i)).sum / (0 to observations.length -1).map(t => gamma(t)(i)).sum
     }
   }
@@ -182,7 +182,9 @@ object HMM {
     acc
   }
 
-  def R(r1: Range, vec: Array[Float])( op: (Int) => Float) = {
+
+
+  def R(vec: Array[Float])(r1: Range)( op: (Int) => Float) = {
     for {
       i <- r1
     } {
@@ -199,7 +201,18 @@ object HMM {
     }
   }
 
-  def R(r1: Range, r2: Range, v1: Array[Array[Float]], v2: Array[Array[Float]])( op: (Int, Int) => (Float, Float)) = {
+  def R(vec: Array[Array[Float]])(r1: Range, r2: Range)(op: (Int, Int) => Float) = {
+    for {
+      i <- r1
+      j <- r2
+    } {
+      vec(i)(j) = op(i, j)
+    }
+  }
+
+
+
+  def R(v1: Array[Array[Float]], v2: Array[Array[Float]])(r1: Range, r2: Range)( op: (Int, Int) => (Float, Float)) = {
     for {
       i <- r1
       j <- r2
