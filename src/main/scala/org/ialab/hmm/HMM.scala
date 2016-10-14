@@ -148,11 +148,11 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 }
 
 object HMM {
-  @inline def ∑[@specialized(Int) I >: Int, @specialized(Float) F <: Float](i0: Int, in: Int)(f: I => F): F = {
+  @inline def ∑(i0: Int, in: Int)(f: Int => Float): Float = {
     var acc = 0f
     var i = i0 - 1
     while ({i += 1; i < in}) acc += f(i)
     while ({i += 1; i < in}) acc += f(i)
-    acc.asInstanceOf[F]
+    acc
   }
 }
