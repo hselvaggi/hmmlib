@@ -10,7 +10,7 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   }
 
 
-  
+
   val rows = array.length / cols
 
   @inline def apply(y: Int, x: Int) = array(x + y * cols)

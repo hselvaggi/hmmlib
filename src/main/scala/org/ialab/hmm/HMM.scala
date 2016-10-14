@@ -25,7 +25,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
   private def forward(observations: Array[Int]): FloatMatrix = {
     val forwardMatrix = new FloatMatrix(observations.length, states)
     forwardMatrix.foreachUpdate((currentTime, finalState, _) =>
-      ∑(stateTransition(_, finalState), forwardMatrix(currentTime - 1, _), 1, states)(_ * _) * symbolOutput(finalState, observations(currentTime)))
+      ∑(1, states)(i => stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * symbolOutput(finalState, observations(currentTime)))
 
     forwardMatrix
   }
@@ -35,8 +35,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
     backwardMatrix.foreachUpdate(colN = 1)((_, _, _) => 1f)
 
     backwardMatrix.foreachUpdate(row0 = 1, col0 = 1)((time, prevState, _) =>
-      ∑(stateTransition(prevState, _), backwardMatrix(time + 1, _), symbolOutput(_, observations(time + 1)), 1, states)(_ * _ * _)
-    )
+      ∑(1, states)(i => stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1))))
 
     backwardMatrix
   }
@@ -88,15 +87,17 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
   def learn(observations: Array[Int]) = {
     val alpha = forward(observations)
     val beta = backward(observations)
-    val eta: Array[FloatMatrix] = Array.tabulate(observations.length)(_ => new FloatMatrix(states, states))
+    val eta: Array[FloatMatrix] = Array.fill(observations.length)(new FloatMatrix(states, states))
     val gamma = new FloatMatrix(observations.length, states)
 
     var time = -1
     while ({time += 1; time < observations.length}) eta(time).foreachUpdate { (i, j, _) =>
       val numerator = alpha(time, i) * stateTransition(i, j) * symbolOutput(j, observations(time)) * beta(time + 1, j)
-      val denominator = ∑(beta(time, _), alpha(time, _), 1, states)(_ * _)
+      val denominator = ∑(1, states)(i => beta(time, i) * alpha(time, i))
 
-      gamma(time, i) = eta(time).row(i).sum //this line is finsy in the original code
+      if (j == states - 1) { //when the row has finished processing
+        gamma(time, i) = eta(time).row(i).sum
+      }
       numerator / denominator
     }
 
@@ -147,21 +148,11 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 }
 
 object HMM {
-  import FloatMatrix.SpecializedFunction3
-  @inline def ∑(v1: Int => Float, v2: Int => Float, i_0: Int, i_n: Int)(op: (Float, Float) =>  Float): Float = {
-    var i = i_0 - 1
+  @inline def ∑[@specialized(Int) I >: Int](i0: Int, in: Int)(f: I => Float): Float = {
     var acc = 0f
-    while ({i += 1; i < i_n}) {
-      acc += op(v1(i), v2(i))
-    }
-    acc
-  }
-  @inline def ∑(v1: Int => Float, v2: Int => Float, v3: Int => Float, i_0: Int, i_n: Int)(op: SpecializedFunction3[Float, Float, Float, Float]): Float = {
-    var i = i_0 - 1
-    var acc = 0f
-    while ({i += 1; i < i_n}) {
-      acc += op(v1(i), v2(i), v3(i))
-    }
+    var i = i0 - 1
+    while ({i += 1; i < in}) acc += f(i)
+    while ({i += 1; i < in}) acc += f(i)
     acc
   }
 }
