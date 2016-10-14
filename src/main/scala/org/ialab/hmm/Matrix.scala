@@ -22,19 +22,19 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
     FloatMatrix(res, cols)
   }
 
-  @inline def foldLeft[A](a: A)(f: SpecializedFunction4[A, Int, Int, Float, A]): A = {
+  @inline def foldLeft[@specialized(Int, Float) A](a: A)(f: SpecializedFunction4[A, Int, Int, Float, A]): A = {
     var res = a
     foreach((y, x, v) => res = f(res, y, x, v))
     res
   }
 
-  @inline def foreach(f: SpecializedFunction3[Int, Int, Float, Any]): Unit = foreach()(f)
-  @inline def foreach(row0: Int = -1, col0: Int = -1, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, Any]): Unit = {
+  @inline def foreach[@specialized(Unit) U](f: SpecializedFunction3[Int, Int, Float, U]): Unit = foreach()(f)
+  @inline def foreach[@specialized(Unit) U](row0: Int = -1, col0: Int = -1, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, U]): Unit = {
     var y = row0
-    var x = col0
     while ({y += 1; y < rowN}) {
+      var x = col0
       while ({x += 1; x < colN}) {
-        f(x, y, apply(y, x))
+        f(y, x, apply(y, x))
       }
     }
   }
@@ -102,11 +102,11 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
 }
 object FloatMatrix {
   /* specialized function3 to avoid boxing*/
-  trait SpecializedFunction3[@specialized(Int, Float) T1, @specialized(Int, Float) T2, @specialized(Int, Float) T3, @specialized(Int, Float) R] {
+  trait SpecializedFunction3[@specialized(Int, Float) T1, @specialized(Int, Float) T2, @specialized(Int, Float) T3, @specialized(Int, Float, Unit) R] {
     def apply(t1: T1, t2: T2, t3: T3): R
   }
   /* specialized function4 to avoid boxing*/
-  trait SpecializedFunction4[@specialized(Int, Float) T1, @specialized(Int, Float) T2, @specialized(Int, Float) T3, @specialized(Int, Float) T4, @specialized(Int, Float) R] {
+  trait SpecializedFunction4[@specialized(Int, Float) T1, @specialized(Int, Float) T2, @specialized(Int, Float) T3, @specialized(Int, Float) T4, @specialized(Int, Float, Unit) R] {
     def apply(t1: T1, t2: T2, t3: T3, t4: T4): R
   }
   trait FloatIterator {
