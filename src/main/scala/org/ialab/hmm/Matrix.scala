@@ -3,8 +3,8 @@ package org.ialab.hmm
 final case class FloatMatrix(array: Array[Float], cols: Int) {
   import FloatMatrix._
 
-  def this(cols: Int, rows: Int) = this(new Array[Float](cols * rows), cols)
-  def this(cols: Int, rows: Int, initialState: FloatMatrix.SpecializedFunction3[Int, Int, Float, Float]) = {
+  def this(rows: Int, cols: Int) = this(new Array[Float](cols * rows), cols)
+  def this(rows: Int, cols: Int, initialState: FloatMatrix.SpecializedFunction3[Int, Int, Float, Float]) = {
     this(new Array[Float](cols * rows), cols)
     foreachUpdate(initialState)
   }
@@ -14,9 +14,9 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   val rows = array.length / cols
 
   @inline def apply(y: Int, x: Int) = try array(x + y * cols)
-  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException((y, x).toString)}
+  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException(s"$y/$rows, $x/$cols")}
   @inline def update(y: Int, x: Int, v: Float) = try array(x + y * cols) = v
-  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException((y, x).toString)}
+  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException(s"$y/$rows, $x/$cols")}
 
   @inline def map(f: SpecializedFunction3[Int, Int, Float, Float]): FloatMatrix = {
     val res = new Array[Float](array.length)
