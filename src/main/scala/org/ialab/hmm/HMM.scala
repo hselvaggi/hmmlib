@@ -24,8 +24,10 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 
   private def forward(observations: Array[Int]): FloatMatrix = {
     val forwardMatrix = new FloatMatrix(observations.length, states)
-    forwardMatrix.foreachUpdate((currentTime, finalState, _) =>
-      ∑(1, states)(i => stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * symbolOutput(finalState, observations(currentTime)))
+    forwardMatrix.foreachUpdate(row0 = 1){ (currentTime, finalState, _) =>
+      val sym = symbolOutput(finalState, observations(currentTime))
+      ∑(1, states)(i => stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * sym
+    }
 
     forwardMatrix
   }
@@ -34,7 +36,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
     val backwardMatrix = new FloatMatrix(observations.length, states)
     backwardMatrix.foreachUpdate(colN = 1)((_, _, _) => 1f)
 
-    backwardMatrix.foreachUpdate(row0 = 1, col0 = 1)((time, prevState, _) =>
+    backwardMatrix.foreachUpdate(row0 = 1, col0 = 1, rowN = backwardMatrix.rows - 1)((time, prevState, _) =>
       ∑(1, states)(i => stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1))))
 
     backwardMatrix
@@ -89,8 +91,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
     val eta: Array[FloatMatrix] = Array.fill(observations.length)(new FloatMatrix(states, states))
     val gamma = new FloatMatrix(observations.length, states)
 
-    var time = -1
-    while ({time += 1; time < observations.length}) eta(time).foreachUpdate { (i, j, _) =>
+    for (time <- 0 until observations.length - 1) eta(time).foreachUpdate { (i, j, _) =>
       val numerator = alpha(time, i) * stateTransition(i, j) * symbolOutput(j, observations(time)) * beta(time + 1, j)
       val denominator = ∑(1, states)(i => beta(time, i) * alpha(time, i))
 
