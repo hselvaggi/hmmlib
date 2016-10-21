@@ -13,8 +13,10 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
 
   val rows = array.length / cols
 
-  @inline def apply(y: Int, x: Int) = array(x + y * cols)
-  @inline def update(y: Int, x: Int, v: Float) = array(x + y * cols) = v
+  @inline def apply(y: Int, x: Int) = try array(x + y * cols)
+  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException((y, x).toString)}
+  @inline def update(y: Int, x: Int, v: Float) = try array(x + y * cols) = v
+  catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException((y, x).toString)}
 
   @inline def map(f: SpecializedFunction3[Int, Int, Float, Float]): FloatMatrix = {
     val res = new Array[Float](array.length)
@@ -40,7 +42,7 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   def row(y: Int): FloatIterator = {
     new FloatIterator {
       var x = -1
-      def hasNext = x < cols
+      def hasNext = (x + 1) < cols
       def next = {
         x += 1
         apply(y, x)
@@ -54,7 +56,7 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
     new Iterable[FloatIterator] {
       def iterator = new Iterator[FloatIterator] {
         var y = -1
-        def hasNext = y < rows
+        def hasNext = (y + 1) < rows
         def next = {
           y += 1
           row(y)
@@ -66,7 +68,7 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   def col(x: Int): FloatIterator = {
     new FloatIterator {
       var y = -1
-      def hasNext = y < rows
+      def hasNext = (y + 1) < rows
       def next = {
         y += 1
         apply(y, x)
@@ -80,7 +82,7 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
     new Iterable[FloatIterator] {
       def iterator = new Iterator[FloatIterator] {
         var x = -1
-        def hasNext = x < cols
+        def hasNext = (x + 1) < cols
         def next = {
           x += 1
           col(x)
@@ -93,6 +95,9 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
    * add all the floats in the matrix
    */
   @inline def sum = foldLeft(0f)((acc, _, _, v) => acc + v)
+
+  override def toString =
+    rowsIterable.map(_.foldLeft(new StringBuilder)((sb, n) => sb.append(n).append(", ")).toString.dropRight(2)).map("| " + _  +" |").mkString("\n")
 }
 object FloatMatrix {
   /* specialized function3 to avoid boxing*/
