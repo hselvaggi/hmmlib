@@ -29,16 +29,10 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   }
 
   @inline def foreach[@specialized(Unit) U](f: SpecializedFunction3[Int, Int, Float, U]): Unit = foreach()(f)
-  @inline def foreach[@specialized(Unit) U](row0: Int = -1, col0: Int = -1, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, U]): Unit = {
-    var y = row0
-    while ({y += 1; y < rowN}) {
-      var x = col0
-      while ({x += 1; x < colN}) {
-        f(y, x, apply(y, x))
-      }
-    }
+  @inline def foreach[@specialized(Unit) U](row0: Int = 0, col0: Int = 0, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, U]): Unit = {
+    for (y <- row0 until rowN; x <- col0 until colN) f(y, x, apply(y, x))
   }
-  @inline def foreachUpdate(row0: Int = -1, col0: Int = -1, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, Float]): Unit = {
+  @inline def foreachUpdate(row0: Int = 0, col0: Int = 0, rowN: Int = rows, colN: Int = cols)(f: SpecializedFunction3[Int, Int, Float, Float]): Unit = {
     foreach(row0, col0, rowN, colN)((y, x, v) => update(y, x, f(y, x, v)))
   }
   @inline def foreachUpdate(f: SpecializedFunction3[Int, Int, Float, Float]): Unit = foreachUpdate()(f)

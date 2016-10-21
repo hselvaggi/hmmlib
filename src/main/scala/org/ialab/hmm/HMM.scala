@@ -42,9 +42,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 
   def evaluate(observations: Array[Int]) : Float = {
     val forwardMatrix = forward(observations)
-    val lastTime = observations.length
 
-    forwardMatrix.row(lastTime).sum
+    forwardMatrix.row(observations.length).sum
   }
 
   /**
@@ -150,9 +149,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 object HMM {
   @inline def ∑(i0: Int, in: Int)(f: Int => Float): Float = {
     var acc = 0f
-    var i = i0 - 1
-    while ({i += 1; i < in}) acc += f(i)
-    while ({i += 1; i < in}) acc += f(i)
+    for (i <- i0 until in) acc += f(i)
     acc
   }
 }
