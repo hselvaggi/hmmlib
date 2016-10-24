@@ -11,39 +11,32 @@ import scala.util.Random
  * @param initialOutput An initial estimation of the probabilities for symbol output based on the current state
  */
 class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
-          val initialTransition: FloatMatrix /*Observations x States*/,
-          val initialOutput: FloatMatrix /*States x Observations*/) {
+          val stateTransition: FloatMatrix /*Observations x States*/,
+          val symbolOutput: FloatMatrix /*States x Observations*/) {
   import HMM._
   require(states > 0, "The state space needs to have at least 1 state")
   require(outputs > 0, "There needs to be at least one possible output symbol")
 
-  private var stateTransition: FloatMatrix = initialTransition
-
-  private var symbolOutput: FloatMatrix = initialOutput
-
-
-  private def forward(observations: Array[Int]): FloatMatrix = {
-    val forwardMatrix = new FloatMatrix(observations.length, states)
-    forwardMatrix.foreachUpdate(row0 = 1){ (currentTime, finalState, _) =>
+  private def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (currentTime, finalState, v) =>
+    if (currentTime > 0) {
       val sym = symbolOutput(finalState, observations(currentTime))
-      ∑(1, states)(i => stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * sym
-    }
-
-    forwardMatrix
+      ∑(1, states)(i =>
+        stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * sym
+    } else v
   }
 
-  private def backward(observations: Array[Int]) = {
-    val backwardMatrix = new FloatMatrix(observations.length, states)
-    backwardMatrix.foreachUpdate(colN = 1)((_, _, _) => 1f)
-
-    backwardMatrix.foreachUpdate(row0 = 1, col0 = 1, rowN = backwardMatrix.rows - 1)((time, prevState, _) =>
-      ∑(1, states)(i => stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1))))
-
-    backwardMatrix
+  private def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (y, x, v) =>
+    val time = backwardMatrix.rows - 1 - y
+    val prevState = backwardMatrix.cols - 1 - x
+    if (time > 0 && prevState > 0 && time < backwardMatrix.rows - 1)
+      ∑(1, states)(i =>
+        stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1)))
+    else v
   }
 
   def evaluate(observations: Array[Int]) : Float = {
-    val forwardMatrix = forward(observations)
+    val forwardMatrix = new FloatMatrix(observations.length, states)
+    forwardMatrix foreachUpdate fusionableForward(forwardMatrix, observations)
 
     forwardMatrix.row(observations.length).sum
   }
@@ -86,8 +79,12 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
    * @param observations Sequence of observations from the environment
    */
   def learn(observations: Array[Int]) = {
-    val alpha = forward(observations)
-    val beta = backward(observations)
+    val alpha = new FloatMatrix(observations.length, states, (y, x, _) => if (y < 1) 1f else 0f)
+    val beta = new FloatMatrix(observations.length, states, (y, x, _) => if (x >= 1) 1f else 0f)
+    alpha foreachUpdate { (y, x, v) =>
+      beta(y, x) = fusionableBackward(beta, observations)(y, x, v)
+      fusionableForward(alpha, observations)(y, x, v)
+    }
     val eta: Array[FloatMatrix] = Array.fill(observations.length)(new FloatMatrix(states, states))
     val gamma = new FloatMatrix(observations.length, states)
 
