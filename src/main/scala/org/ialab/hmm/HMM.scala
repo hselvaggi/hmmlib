@@ -7,8 +7,6 @@ import scala.util.Random
  * @param states A value that represent the number of states in the chain
  * @param outputs Specify how many different output values can exist
  * @param initialStates An initial estimatino of the initial state probabilities
- * @param initialTransition An initial estimation of the transition probabilites between states
- * @param initialOutput An initial estimation of the probabilities for symbol output based on the current state
  */
 class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
           val stateTransition: FloatMatrix /*Observations x States*/,
@@ -17,21 +15,22 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
   require(states > 0, "The state space needs to have at least 1 state")
   require(outputs > 0, "There needs to be at least one possible output symbol")
 
-  private def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (currentTime, finalState, v) =>
+  private def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (finalState, currentTime, v) =>
     if (currentTime > 0) {
       val sym = symbolOutput(finalState, observations(currentTime))
       ∑(1, states)(i =>
-        stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * sym
-    } else v
+        stateTransition(i, finalState) * forwardMatrix(i, currentTime - 1)) * sym
+    } else initialStates(finalState) * symbolOutput(finalState, observations(0))
   }
 
-  private def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (y, x, v) =>
-    val time = backwardMatrix.rows - 1 - y
-    val prevState = backwardMatrix.cols - 1 - x
-    if (time > 0 && prevState > 0 && time < backwardMatrix.rows - 1)
-      ∑(1, states)(i =>
-        stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1)))
-    else v
+  private def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (prevState, currentTime, v) =>
+    val time = backwardMatrix.cols - 1 - currentTime
+    if (currentTime > 0) {
+      ∑(0, states)(i =>
+        stateTransition(prevState, i) * backwardMatrix(i, currentTime - 1) * symbolOutput(i, observations(time)))
+    }
+    else 1
+    1
   }
 
   def evaluate(observations: Array[Int]) : Float = {
@@ -79,35 +78,41 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
    * @param observations Sequence of observations from the environment
    */
   def learn(observations: Array[Int]) = {
-    val alpha = new FloatMatrix(observations.length, states, (y, x, _) => if (y < 1) 1f else 0f)
-    val beta = new FloatMatrix(observations.length, states, (y, x, _) => if (x >= 1) 1f else 0f)
+    val alpha = new FloatMatrix(states, observations.length)
+    val beta = new FloatMatrix(states, observations.length)
     alpha foreachUpdate { (y, x, v) =>
       beta(y, x) = fusionableBackward(beta, observations)(y, x, v)
       fusionableForward(alpha, observations)(y, x, v)
     }
+
+//    println("Alpha")
+//    println(alpha.toString)
+//    println("Beta")
+//    println(beta.toString)
+
     val eta: Array[FloatMatrix] = Array.fill(observations.length)(new FloatMatrix(states, states))
     val gamma = new FloatMatrix(observations.length, states)
 
     for (time <- 0 until observations.length - 1) eta(time).foreachUpdate { (i, j, _) =>
-      val numerator = alpha(time, i) * stateTransition(i, j) * symbolOutput(j, observations(time)) * beta(time + 1, j)
-      val denominator = ∑(1, states)(i => beta(time, i) * alpha(time, i))
+      val numerator = alpha(i, time) * stateTransition(i, j) * symbolOutput(j, observations(time+1)) * beta(j, time + 1)
+      val denominator = ∑(1, states)(i => beta(i, time) * alpha(i, time))
 
-      if (j == states - 1) { //when the row has finished processing
-        gamma(time, i) = eta(time).row(i).sum
-      }
       numerator / denominator
     }
 
+    for(time <- 0 until observations.length - 1; i <- 0 until states) {
+      gamma(time, i) = eta(time).row(i).sum
+    }
+
     stateTransition.foreachUpdate { (i, j, _) =>
-      val numerator = eta.map(_(i, j)).sum
+      val numerator = ∑(0, observations.length) { t => eta(t)(i,j) }
       val denominator = gamma.col(i).sum
       numerator / denominator
     }
 
     symbolOutput.foreachUpdate { (i, o, prev) =>
-      val gammaSum = gamma.col(i).sum
-      val numerator = prev * gammaSum
-      val denominator = gammaSum
+      val numerator = ∑(0, observations.length) { t => if (observations(t) == o) gamma(t,i) else 0 }
+      val denominator = gamma.col(i).sum
       numerator / denominator
     }
   }

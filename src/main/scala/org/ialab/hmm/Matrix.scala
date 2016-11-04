@@ -4,14 +4,23 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
   import FloatMatrix._
 
   def this(rows: Int, cols: Int) = this(new Array[Float](cols * rows), cols)
+  def this(rows: Int, cols: Int, value: Float) = {
+    this(rows, cols)
+    for(i <- 0 until rows * cols) array(i) = value
+  }
   def this(rows: Int, cols: Int, initialState: FloatMatrix.SpecializedFunction3[Int, Int, Float, Float]) = {
     this(new Array[Float](cols * rows), cols)
     foreachUpdate(initialState)
   }
 
-
-
   val rows = array.length / cols
+
+//  def toString = {
+//    rowsIterable.map( fit => {
+//      fit.foldLeft("")((s, f) => { s + " " + f}) + "\n"
+//    } ).reduce((x, y) => x + y)
+//  }
+
 
   @inline def apply(y: Int, x: Int) = try array(x + y * cols)
   catch { case e: ArrayIndexOutOfBoundsException => throw new ArrayIndexOutOfBoundsException(s"$y/$rows, $x/$cols")}
@@ -100,6 +109,9 @@ final case class FloatMatrix(array: Array[Float], cols: Int) {
     rowsIterable.map(_.foldLeft(new StringBuilder)((sb, n) => sb.append(n).append(", ")).toString.dropRight(2)).map("| " + _  +" |").mkString("\n")
 }
 object FloatMatrix {
+
+  def ConstantMatrix(rows: Int, cols: Int, value: Float) = new FloatMatrix(rows, cols, value)
+
   /* specialized function3 to avoid boxing*/
   trait SpecializedFunction3[@specialized(Int, Float) T1, @specialized(Int, Float) T2, @specialized(Int, Float) T3, @specialized(Int, Float, Unit) R] {
     def apply(t1: T1, t2: T2, t3: T3): R
