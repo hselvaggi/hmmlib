@@ -44,7 +44,7 @@ class HMMTest extends FlatSpec with PrivateMethodTester {
     val hmm = new HMM(2, 2, Array[Double](0.5f, 0.5f), ConstantMatrix(2, 2, 0.5f),
       FloatMatrix(Array[Double](0.7f, 0.3f, 0.3f, 0.7f), 2))
 
-    hmm.learn(observations)
+    hmm.learn(observations, 20)
 
     assert(hmm.viterbi(Array[Int] (0,0,0,0,1))._1 > hmm.viterbi(Array[Int] (1,1,1,1,0))._1)
 
@@ -67,7 +67,7 @@ class HMMTest extends FlatSpec with PrivateMethodTester {
                               1f, 0f), 2))
 
 
-    hmm.learn(observations)
+    hmm.learn(observations, 20)
 
 
     assert(hmm.viterbi(Array[Int] (0,0,0,0,1,0))._2.sameElements(Array[Double](0,0,0,0,1,2)))

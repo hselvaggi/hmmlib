@@ -1,5 +1,6 @@
 package org.ialab.hmm
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 /**
@@ -77,7 +78,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
    * then being able to generate or predict new sequences
    * @param observations Sequence of observations from the environment
    */
-  def learn(observations: Array[Int]) = {
+  def learn(observations: Array[Int], iterationsLeft: Int): Unit = {
     val alpha = new FloatMatrix(observations.length, states)
     val beta = new FloatMatrix(observations.length, states)
     alpha foreachUpdate { (y, x, v) =>
@@ -110,6 +111,17 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
       val denominator = gamma.col(i).sum
       numerator / denominator
     }
+
+    alpha foreachUpdate { (y, x, v) =>
+      fusionableForward(alpha, observations)(y, x, v)
+    }
+
+    val newestimator = ∑(0, states)(k => alpha(observations.length-1,k))
+
+    if(iterationsLeft > 0 && Math.abs(newestimator - denominator) > 1e-62) {
+      learn(observations, iterationsLeft - 1)
+    }
+
   }
 
   /**
