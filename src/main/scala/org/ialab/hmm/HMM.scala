@@ -1,5 +1,6 @@
 package org.ialab.hmm
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 /**
@@ -7,34 +8,33 @@ import scala.util.Random
  * @param states A value that represent the number of states in the chain
  * @param outputs Specify how many different output values can exist
  * @param initialStates An initial estimatino of the initial state probabilities
- * @param initialTransition An initial estimation of the transition probabilites between states
- * @param initialOutput An initial estimation of the probabilities for symbol output based on the current state
  */
-class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
-          val stateTransition: FloatMatrix /*Observations x States*/,
+class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
+          val stateTransition: FloatMatrix /*States x States*/,
           val symbolOutput: FloatMatrix /*States x Observations*/) {
   import HMM._
+
   require(states > 0, "The state space needs to have at least 1 state")
   require(outputs > 0, "There needs to be at least one possible output symbol")
 
-  private def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (currentTime, finalState, v) =>
+  def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Double, Double] = { (currentTime, finalState, v) =>
     if (currentTime > 0) {
-      val sym = symbolOutput(finalState, observations(currentTime))
-      ∑(1, states)(i =>
-        stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * sym
-    } else v
+      ∑(0, states)(i =>
+        stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * symbolOutput(finalState, observations(currentTime))
+    } else initialStates(finalState) * symbolOutput(finalState, observations(0))
   }
 
-  private def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (y, x, v) =>
-    val time = backwardMatrix.rows - 1 - y
-    val prevState = backwardMatrix.cols - 1 - x
-    if (time > 0 && prevState > 0 && time < backwardMatrix.rows - 1)
-      ∑(1, states)(i =>
-        stateTransition(prevState, i) * backwardMatrix(time + 1, i) * symbolOutput(i, observations(time + 1)))
-    else v
+  def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Double, Double] = { (currentTime, prevState, v) =>
+    val time = backwardMatrix.rows - 1 - currentTime
+//    println("time " + currentTime + " " + time + " " + backwardMatrix.rows)
+    if (currentTime > 0) {
+      ∑(0, states)(i =>
+        stateTransition(prevState, i) * backwardMatrix(currentTime-1, i) * symbolOutput(i, observations(time+1)))
+    }
+    else 1
   }
 
-  def evaluate(observations: Array[Int]) : Float = {
+  def evaluate(observations: Array[Int]) : Double = {
     val forwardMatrix = new FloatMatrix(observations.length, states)
     forwardMatrix foreachUpdate fusionableForward(forwardMatrix, observations)
 
@@ -47,14 +47,14 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
    * @param observations The outputs that has been observed
    * @return (probability, state sequence)
    */
-  def viterbi(observations: Array[Int]): (Float, Array[Float]) = {
+  def viterbi(observations: Array[Int]): (Double, Array[Double]) = {
     val delta = new FloatMatrix(observations.length, states)
     val phsi = new FloatMatrix(observations.length, states)
 
     delta.foreachUpdate(rowN = 1)((y, x, _) => initialStates(x) * symbolOutput(x, observations(0)))
 
     delta.foreachUpdate(row0 = 1){ (time, next, _) =>
-      val temp = new FloatMatrix(1, states, initialState = (_: Int, i: Int, _: Float) => delta(time-1, i) * stateTransition(i, next))
+      val temp = new FloatMatrix(1, states, initialState = (_: Int, i: Int, _: Double) => delta(time-1, i) * stateTransition(i, next))
       val maxValue = temp.row(0).max
       phsi(time, next) = temp.row(0).indexOf(maxValue)
       maxValue * symbolOutput(next, observations(time))
@@ -62,7 +62,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 
     val probability = delta.row(observations.length-1).max
 
-    val sequence: Array[Float] = new Array[Float](observations.length)
+    val sequence: Array[Double] = new Array[Double](observations.length)
     sequence(observations.length-1) = delta.row(observations.length-1).indexOf(probability)
 
     {
@@ -78,47 +78,59 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
    * then being able to generate or predict new sequences
    * @param observations Sequence of observations from the environment
    */
-  def learn(observations: Array[Int]) = {
-    val alpha = new FloatMatrix(observations.length, states, (y, x, _) => if (y < 1) 1f else 0f)
-    val beta = new FloatMatrix(observations.length, states, (y, x, _) => if (x >= 1) 1f else 0f)
+  def learn(observations: Array[Int], iterationsLeft: Int): Unit = {
+    val alpha = new FloatMatrix(observations.length, states)
+    val beta = new FloatMatrix(observations.length, states)
     alpha foreachUpdate { (y, x, v) =>
       beta(y, x) = fusionableBackward(beta, observations)(y, x, v)
       fusionableForward(alpha, observations)(y, x, v)
     }
+
     val eta: Array[FloatMatrix] = Array.fill(observations.length)(new FloatMatrix(states, states))
     val gamma = new FloatMatrix(observations.length, states)
 
-    for (time <- 0 until observations.length - 1) eta(time).foreachUpdate { (i, j, _) =>
-      val numerator = alpha(time, i) * stateTransition(i, j) * symbolOutput(j, observations(time)) * beta(time + 1, j)
-      val denominator = ∑(1, states)(i => beta(time, i) * alpha(time, i))
+    val denominator = ∑(0, states)(k => alpha(observations.length-1,k))
 
-      if (j == states - 1) { //when the row has finished processing
-        gamma(time, i) = eta(time).row(i).sum
-      }
+    for (time <- 0 until observations.length - 1) eta(time).foreachUpdate { (i, j, _) =>
+      val numerator = alpha(time, i) * stateTransition(i, j) * symbolOutput(j, observations(time+1)) * beta(time + 1, j)
       numerator / denominator
     }
 
+    for(time <- 0 until observations.length - 1; i <- 0 until states) {
+      gamma(time, i) = eta(time).row(i).sum
+    }
+
     stateTransition.foreachUpdate { (i, j, _) =>
-      val numerator = eta.map(_(i, j)).sum
+      val numerator = ∑(0, observations.length) { t => eta(t)(i,j) }
       val denominator = gamma.col(i).sum
       numerator / denominator
     }
 
     symbolOutput.foreachUpdate { (i, o, prev) =>
-      val gammaSum = gamma.col(i).sum
-      val numerator = prev * gammaSum
-      val denominator = gammaSum
+      val numerator = ∑(0, observations.length) { t => if (observations(t) == o) gamma(t,i) else 0 }
+      val denominator = gamma.col(i).sum
       numerator / denominator
     }
+
+    alpha foreachUpdate { (y, x, v) =>
+      fusionableForward(alpha, observations)(y, x, v)
+    }
+
+    val newestimator = ∑(0, states)(k => alpha(observations.length-1,k))
+
+    if(iterationsLeft > 0 && Math.abs(newestimator - denominator) > 1e-62) {
+      learn(observations, iterationsLeft - 1)
+    }
+
   }
 
   /**
    * generalization of generateOutput and nextState
    */
-  private def next(probVec: Int => Float): Int = {
-    val prob = Random.nextFloat()
+  private def next(probVec: Int => Double): Int = {
+    val prob = Random.nextDouble()
 
-    val (_, output) = (0 until outputs).foldLeft((0f, 0)) {
+    val (_, output) = (0 until outputs).foldLeft((0.0, 0)) {
       case ((currentProb, output), newOutput) =>
         val newProb = currentProb + probVec(newOutput)
         (newProb, if (newProb < prob) newOutput else output)
@@ -145,8 +157,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
 }
 
 object HMM {
-  @inline def ∑(i0: Int, in: Int)(f: Int => Float): Float = {
-    var acc = 0f
+  @inline def ∑(i0: Int, in: Int)(f: Int => Double): Double = {
+    var acc = 0.0
     for (i <- i0 until in) acc += f(i)
     acc
   }
