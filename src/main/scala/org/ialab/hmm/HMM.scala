@@ -9,7 +9,7 @@ import scala.util.Random
  * @param outputs Specify how many different output values can exist
  * @param initialStates An initial estimatino of the initial state probabilities
  */
-class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
+class HMM(val states: Int, val outputs: Int, val initialStates: Array[Float],
           val stateTransition: FloatMatrix /*States x States*/,
           val symbolOutput: FloatMatrix /*States x Observations*/) {
   import HMM._
@@ -17,14 +17,14 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
   require(states > 0, "The state space needs to have at least 1 state")
   require(outputs > 0, "There needs to be at least one possible output symbol")
 
-  def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Double, Double] = { (currentTime, finalState, v) =>
+  def fusionableForward(forwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (currentTime, finalState, v) =>
     if (currentTime > 0) {
       ∑(0, states)(i =>
         stateTransition(i, finalState) * forwardMatrix(currentTime - 1, i)) * symbolOutput(finalState, observations(currentTime))
     } else initialStates(finalState) * symbolOutput(finalState, observations(0))
   }
 
-  def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Double, Double] = { (currentTime, prevState, v) =>
+  def fusionableBackward(backwardMatrix: FloatMatrix, observations: Array[Int]): FloatMatrix.SpecializedFunction3[Int, Int, Float, Float] = { (currentTime, prevState, v) =>
     val time = backwardMatrix.rows - 1 - currentTime
 //    println("time " + currentTime + " " + time + " " + backwardMatrix.rows)
     if (currentTime > 0) {
@@ -34,7 +34,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
     else 1
   }
 
-  def evaluate(observations: Array[Int]) : Double = {
+  def evaluate(observations: Array[Int]) : Float = {
     val forwardMatrix = new FloatMatrix(observations.length, states)
     forwardMatrix foreachUpdate fusionableForward(forwardMatrix, observations)
 
@@ -47,14 +47,14 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
    * @param observations The outputs that has been observed
    * @return (probability, state sequence)
    */
-  def viterbi(observations: Array[Int]): (Double, Array[Double]) = {
+  def viterbi(observations: Array[Int]): (Float, Array[Float]) = {
     val delta = new FloatMatrix(observations.length, states)
     val phsi = new FloatMatrix(observations.length, states)
 
     delta.foreachUpdate(rowN = 1)((y, x, _) => initialStates(x) * symbolOutput(x, observations(0)))
 
     delta.foreachUpdate(row0 = 1){ (time, next, _) =>
-      val temp = new FloatMatrix(1, states, initialState = (_: Int, i: Int, _: Double) => delta(time-1, i) * stateTransition(i, next))
+      val temp = new FloatMatrix(1, states, initialState = (_: Int, i: Int, _: Float) => delta(time-1, i) * stateTransition(i, next))
       val maxValue = temp.row(0).max
       phsi(time, next) = temp.row(0).indexOf(maxValue)
       maxValue * symbolOutput(next, observations(time))
@@ -62,7 +62,7 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
 
     val probability = delta.row(observations.length-1).max
 
-    val sequence: Array[Double] = new Array[Double](observations.length)
+    val sequence: Array[Float] = new Array[Float](observations.length)
     sequence(observations.length-1) = delta.row(observations.length-1).indexOf(probability)
 
     {
@@ -127,8 +127,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
   /**
    * generalization of generateOutput and nextState
    */
-  private def next(probVec: Int => Double): Int = {
-    val prob = Random.nextDouble()
+  private def next(probVec: Int => Float): Int = {
+    val prob = Random.nextFloat()
 
     val (_, output) = (0 until outputs).foldLeft((0.0, 0)) {
       case ((currentProb, output), newOutput) =>
@@ -157,8 +157,8 @@ class HMM(val states: Int, val outputs: Int, val initialStates: Array[Double],
 }
 
 object HMM {
-  @inline def ∑(i0: Int, in: Int)(f: Int => Double): Double = {
-    var acc = 0.0
+  @inline def ∑(i0: Int, in: Int)(f: Int => Float): Float = {
+    var acc = 0.0f
     for (i <- i0 until in) acc += f(i)
     acc
   }
